@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Reactor Mechanic</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <style>
+    :root {
+      --pad: 14px;
+      --radius: 14px;
+      --maxw: 820px;
+      --shadow: 0 8px 24px rgba(0,0,0,.12);
+      --ink:#f3f3f7;
+      --bg:#0e0f13;
+      --card:#161820;
+      --line:#2a2d38;
+      --accent:#6ee7ff;
+      --good:#9aff6e;
+      --warn:#ffd66e;
+      --bad:#ff7a7a;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--ink); }
+    .wrap { max-width: var(--maxw); margin: 0 auto; padding: env(safe-area-inset-top) var(--pad) calc(84px + env(safe-area-inset-bottom)); }
+    header { display:flex; align-items:center; justify-content:space-between; gap:10px; margin: 10px 0 8px; }
+    .title { font-weight: 800; letter-spacing: .3px; }
+    .stat { font-variant-numeric: tabular-nums; opacity:.92; }
+    .row { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .small { font-size:12px; opacity:.72; }
+    .pill { padding:4px 8px; border-radius:999px; border:1px solid var(--line); background:#10131a; font-size:12px; }
+    .grid { display:grid; grid-template-columns: 1fr; gap:10px; }
+    @media (min-width: 560px){ .grid { grid-template-columns: 1fr 1fr; } }
+    .card { padding:12px; border-radius:16px; background:var(--card); border:1px solid var(--line); box-shadow: var(--shadow); }
+    .section { margin: 10px 0; }
+    .bigbtn { width:100%; padding:22px; margin:10px 0; border-radius:16px; background:linear-gradient(180deg, #232632, #151923); border:1px solid var(--line); box-shadow: var(--shadow); font-size:18px; font-weight:800; }
+    .bigbtn:active { transform: translateY(1px); }
+    .btn { padding:10px 12px; border-radius:12px; background:#1a1f2a; border:1px solid var(--line); font-weight:700; }
+    .btn:disabled { opacity:.5; }
+    .meters { display:grid; grid-template-columns: 1fr; gap:8px; }
+    @media (min-width: 560px){ .meters { grid-template-columns: 1fr 1fr 1fr; } }
+    .meter { padding:10px; border:1px solid var(--line); border-radius:12px; background:#10131a; }
+    .bar { height:8px; border-radius:999px; background:#0b0d12; border:1px solid var(--line); overflow:hidden; }
+    .fill { height:100%; width:0%; background: linear-gradient(90deg, var(--good), var(--accent)); transition: width .2s; }
+    .bad .fill { background: linear-gradient(90deg, var(--bad), #ffb36e); }
+    .warn .fill { background: linear-gradient(90deg, var(--warn), var(--good)); }
+    .resline { display:flex; gap:10px; flex-wrap:wrap; }
+    .res { padding:8px 10px; border:1px solid var(--line); border-radius:12px; background:#0f1219; font-variant-numeric: tabular-nums; }
+    footer {
+      position: fixed; left: 0; right: 0; bottom: 0;
+      padding: 10px max(env(safe-area-inset-left), var(--pad)) calc(10px + env(safe-area-inset-bottom)) max(env(safe-area-inset-right), var(--pad));
+      background: linear-gradient(180deg, rgba(10,12,16,0), rgba(10,12,16,.9) 30%, rgba(10,12,16,1) 70%);
+      backdrop-filter: blur(6px);
+    }
+    .toolbar { max-width: var(--maxw); margin: 0 auto; display:grid; grid-template-columns: repeat(4,1fr); gap:8px; }
+    .tbtn { padding:12px; border-radius:12px; background:#141824; border:1px solid var(--line); text-align:center; font-weight:700; }
+    .tbtn.active { outline:2px solid var(--accent); }
+    .hidden { display:none !important; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <div class="title">Reactor Mechanic</div>
+        <div class="small">Keep the beast humming: balance heat, pressure, and contamination to hit peak output.</div>
+      </div>
+      <div class="stat" id="efficiencyLabel">100% eff</div>
+    </header>
+
+    <div class="section" id="overviewTab">
+      <div class="resline" id="resources"></div>
+      <button class="bigbtn" id="tap">Adjust Control Rods (+<span id="perClick">1</span> energy)</button>
+
+      <div class="grid">
+        <div class="card">
+          <div class="row"><div><b>Rod Calibration</b><div class="small">Increase energy per tap.</div></div><div class="pill" id="rodLvl">Lv 0</div></div>
+          <div class="row"><button class="btn" id="buyRod">Buy</button><div class="small" id="rodCost">Cost: 0</div></div>
+        </div>
+
+        <div class="card">
+          <div class="row"><div><b>Efficiency Tuning</b><div class="small">+% to tap yield.</div></div><div class="pill" id="effTuneLvl">Lv 0</div></div>
+          <div class="row"><button class="btn" id="buyEffTune">Buy</button><div class="small" id="effTuneCost">Cost: 0</div></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="card">
+          <div class="row"><div><b>Automation</b><div class="small">Passive generation (affected by efficiency)</div></div></div>
+          <div id="autos" class="grid" style="margin-top:8px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section hidden" id="systemsTab">
+      <div class="card">
+        <div class="row"><div><b>Phase One</b><div class="small">Fuel, enhancement, basic coolant loop</div></div></div>
+        <div id="phase1" class="grid" style="margin-top:8px;"></div>
+      </div>
+      <div class="card" style="margin-top:10px;">
+        <div class="row"><div><b>Phase Two</b><div class="small">By-product refinery and advanced agents</div></div></div>
+        <div id="phase2" class="grid" style="margin-top:8px;"></div>
+      </div>
+      <div class="card" style="margin-top:10px;">
+        <div class="row"><div><b>Phase Three</b><div class="small">Specialized energy outputs</div></div></div>
+        <div id="phase3" class="grid" style="margin-top:8px;"></div>
+      </div>
+    </div>
+
+    <div class="section hidden" id="maintenanceTab">
+      <div class="card">
+        <div class="row"><div><b>Plant Health</b><div class="small">Efficiency is multiplied by these meters</div></div><div class="pill mono" id="efficiency">1.00×</div></div>
+        <div class="meters" style="margin-top:8px;">
+          <div class="meter" id="heatBox">
+            <div class="row"><div><b>Heat</b> <span class="small">Stay below 80%</span></div><div class="pill mono" id="heatVal">0%</div></div>
+            <div class="bar"><div class="fill" id="heatFill"></div></div>
+            <div class="row" style="margin-top:8px;">
+              <button class="btn" id="ventSteam">Vent Steam (cool fast)</button>
+              <div class="small" id="ventCD">ready</div>
+            </div>
+          </div>
+          <div class="meter" id="pressureBox">
+            <div class="row"><div><b>Pressure</b> <span class="small">Keep in mid band</span></div><div class="pill mono" id="pressureVal">0%</div></div>
+            <div class="bar"><div class="fill" id="pressureFill"></div></div>
+            <div class="row" style="margin-top:8px;">
+              <button class="btn" id="balancePressure">Balance Valves</button>
+              <div class="small" id="balanceCD">ready</div>
+            </div>
+          </div>
+          <div class="meter" id="contamBox">
+            <div class="row"><div><b>Contamination</b> <span class="small">Filters creep up</span></div><div class="pill mono" id="contamVal">0%</div></div>
+            <div class="bar"><div class="fill" id="contamFill"></div></div>
+            <div class="row" style="margin-top:8px;">
+              <button class="btn" id="purgeFilters">Purge Filters</button>
+              <div class="small" id="purgeCD">ready</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="small" style="margin-top:8px;">Tip: ignoring maintenance won’t stop production, but your <b>efficiency multiplier</b> will sink. Keep meters healthy to hit peak output.</div>
+    </div>
+
+    <div class="section hidden" id="dataTab">
+      <div class="card">
+        <div class="row"><div><b>Save & Data</b></div></div>
+        <div class="row" style="gap:8px; flex-wrap:wrap; margin-top:8px;">
+          <button class="btn" id="save">Save now</button>
+          <button class="btn" id="reset">Hard reset</button>
+          <button class="btn" id="export">Export</button>
+          <button class="btn" id="import">Import</button>
+        </div>
+        <div class="small" id="saveStatus" style="margin-top:8px; opacity:.7">Autosaves every ~10s</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="toolbar">
+      <div class="tbtn active" id="tabOverview">Overview</div>
+      <div class="tbtn" id="tabSystems">Systems</div>
+      <div class="tbtn" id="tabMaintenance">Maintenance</div>
+      <div class="tbtn" id="tabData">Data</div>
+    </div>
+  </footer>
+
+<script>
+// ---------- helpers ----------
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const fmt = n => {
+  if (!isFinite(n)) return "∞";
+  if (Math.abs(n) < 1e6) return Math.round(n).toLocaleString();
+  const u = ["","K","M","B","T","Qa","Qi","Sx","Sp","Oc","No","Dc"];
+  let i=0; let v=n;
+  while (Math.abs(v)>=1000 && i<u.length-1){ v/=1000; i++; }
+  const d = Math.abs(v) >= 100 ? 0 : Math.abs(v) >= 10 ? 1 : 2;
+  return v.toFixed(d).replace(/\.0+$/,"")+u[i];
+};
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const now = () => performance.now();
+
+// ---------- state ----------
+const defaultState = {
+  version: 2,
+  res: {
+    energy: 0,
+    thermal: 0,
+    plasma: 0,
+    byprod: 0,
+    coolant: 0,
+    agent1: 0,
+    agent2: 0
+  },
+  upgrades: { rod:0, effTune:0 },
+  autos: { turbine:0, pump:0, controlAI:0 },
+  systems: {
+    fuelEnhancer:0, // boosts tap & turbine
+    byprodRefinery:0, // converts by-products -> agent1
+    coolantPlant:0 // generates coolant
+  },
+  meters: { heat:20, pressure:50, contam:10 }, // 0..100
+  lastTime: Date.now()
+};
+let S = load() || structuredClone(defaultState);
+
+// design knobs
+const DESIGN = {
+  tapBase: 1,
+  rod: { baseCost: 15, growth: 1.15, delta: 1 },
+  effTune: { baseCost: 120, growth: 1.18, percent: 10 },
+  autos: {
+    turbine:  { base: 0.6, baseCost: 30, growth: 1.16, label: "Steam Turbine (+0.6 energy/s)" },
+    pump:     { base: 3,   baseCost: 260, growth: 1.18, label: "Auxiliary Pump (+3 energy/s)" },
+    controlAI:{ base: 18,  baseCost: 1350,growth: 1.20, label: "Control AI (+18 energy/s)" }
+  },
+  systems: {
+    fuelEnhancer:   { baseCost: 200, growth:1.22, label:"+5% tap & turbine output per level", tapMult:0.05, turbMult:0.05 },
+    byprodRefinery: { baseCost: 350, growth:1.20, label:"Refine by-product → agent1 (0.5/s per level)", rate:0.5 },
+    coolantPlant:   { baseCost: 220, growth:1.18, label:"Generate coolant (0.4/s per level)", rate:0.4 }
+  },
+  maintenance: {
+    heatGainPerEnergy: 0.0002,      // heat rises with production
+    heatVent: 25,                    // button effect
+    pressureDrift: 0.003,           // toward 70 over time
+    pressureBalance: 15,            // button effect
+    contamGainPerSecond: 0.02,      // slow creep
+    purge: 35,                       // button effect
+    efficiencyFloor: 0.25           // never below 25%
+  }
+};
+
+// ---------- economy ----------
+function levelCost(base, growth, lvl){ return Math.ceil(base * Math.pow(growth, lvl)); }
+function tapAmount(){
+  const base = DESIGN.tapBase + S.upgrades.rod * DESIGN.rod.delta;
+  const mult = 1 + (S.upgrades.effTune * DESIGN.effTune.percent)/100 + (S.systems.fuelEnhancer * DESIGN.systems.fuelEnhancer.tapMult);
+  return base * mult * efficiency();
+}
+function ppsEnergyBase(){
+  let sum = 0;
+  for (const k in S.autos){ sum += S.autos[k] * DESIGN.autos[k].base; }
+  // fuel enhancer boosts turbine
+  sum *= 1 + S.systems.fuelEnhancer * DESIGN.systems.fuelEnhancer.turbMult;
+  return sum;
+}
+function ppsEnergy(){ return ppsEnergyBase() * efficiency(); }
+
+// ---------- efficiency from meters ----------
+function efficiency(){
+  const {heat, pressure, contam} = S.meters;
+  // piecewise multipliers
+  let m = 1.0;
+  // Heat: best <= 70, above 85 hurts
+  if (heat <= 70) m *= 1.0;
+  else if (heat <= 85) m *= 0.9;
+  else m *= 0.65;
+  // Pressure: ideal band 45..65
+  if (pressure >= 45 && pressure <= 65) m *= 1.05;
+  else if (pressure >= 35 && pressure <= 75) m *= 1.0;
+  else m *= 0.85;
+  // Contamination: linear penalty
+  m *= (1 - contam/200); // at 100%, 0.5x
+  m = Math.max(DESIGN.maintenance.efficiencyFloor, m);
+  return m;
+}
+
+// ---------- UI construction ----------
+function buildOverview(){
+  // resources line
+  const resMap = [
+    ["energy","⚡ Energy"],
+    ["thermal","♨ Thermal"],
+    ["plasma","✦ Plasma"],
+    ["coolant","❄ Coolant"],
+    ["byprod","⬡ By-product"],
+    ["agent1","A1"],
+    ["agent2","A2"]
+  ];
+  const R = document.querySelector("#resources");
+  R.innerHTML = "";
+  for (const [k,label] of resMap){
+    const d = document.createElement("div");
+    d.className = "res mono"; d.id = "res_"+k;
+    d.textContent = label + ": 0";
+    R.appendChild(d);
+  }
+  // buttons and costs
+  document.querySelector("#perClick").textContent = fmt(tapAmount());
+  document.querySelector("#rodLvl").textContent = "Lv " + S.upgrades.rod;
+  document.querySelector("#effTuneLvl").textContent = "Lv " + S.upgrades.effTune;
+  document.querySelector("#rodCost").textContent = "Cost: " + fmt(levelCost(DESIGN.rod.baseCost, DESIGN.rod.growth, S.upgrades.rod));
+  document.querySelector("#effTuneCost").textContent = "Cost: " + fmt(levelCost(DESIGN.effTune.baseCost, DESIGN.effTune.growth, S.upgrades.effTune));
+
+  document.querySelector("#buyRod").onclick = ()=> buyWithEnergy(levelCost(DESIGN.rod.baseCost, DESIGN.rod.growth, S.upgrades.rod), ()=> S.upgrades.rod++);
+  document.querySelector("#buyEffTune").onclick = ()=> buyWithEnergy(levelCost(DESIGN.effTune.baseCost, DESIGN.effTune.growth, S.upgrades.effTune), ()=> S.upgrades.effTune++);
+
+  // autos grid
+  const autos = document.querySelector("#autos"); autos.innerHTML = "";
+  for (const key of Object.keys(DESIGN.autos)){
+    const def = DESIGN.autos[key];
+    autos.appendChild(makeBuyCard(
+      def.label,
+      ()=> levelCost(def.baseCost, def.growth, S.autos[key]),
+      ()=> S.autos[key]++
+    ));
+  }
+}
+function makeBuyCard(label, costFn, onBuy){
+  const card = document.createElement("div");
+  card.className = "card";
+  const row1 = document.createElement("div"); row1.className = "row";
+  const left = document.createElement("div"); left.innerHTML = "<b>"+label+"</b>";
+  const right = document.createElement("div"); right.className="pill mono"; right.textContent="Lv ?";
+  row1.appendChild(left); row1.appendChild(right);
+  const row2 = document.createElement("div"); row2.className = "row"; row2.style.marginTop="6px";
+  const btn = document.createElement("button"); btn.className="btn"; btn.textContent="Buy";
+  const cost = document.createElement("div"); cost.className="small"; cost.textContent="Cost: 0";
+  row2.appendChild(btn); row2.appendChild(cost);
+  card.appendChild(row1); card.appendChild(row2);
+  card.sync = ()=> { right.textContent = "Lv " + (card.level||0); cost.textContent = "Cost: " + fmt(costFn()); btn.disabled = S.res.energy < costFn(); };
+  card.level = 0;
+  btn.onclick = ()=> {
+    const c = costFn();
+    if (S.res.energy >= c){ S.res.energy -= c; onBuy(); card.level++; syncAll(); }
+  };
+  return card;
+}
+function buildSystems(){
+  const phase1 = document.querySelector("#phase1"); phase1.innerHTML = "";
+  phase1.appendChild(makeNamedSystemCard("Fuel Enhancer", DESIGN.systems.fuelEnhancer.label,
+    ()=> levelCost(DESIGN.systems.fuelEnhancer.baseCost, DESIGN.systems.fuelEnhancer.growth, S.systems.fuelEnhancer),
+    ()=> S.systems.fuelEnhancer++));
+
+  phase1.appendChild(makeNamedSystemCard("Coolant Plant", DESIGN.systems.coolantPlant.label,
+    ()=> levelCost(DESIGN.systems.coolantPlant.baseCost, DESIGN.systems.coolantPlant.growth, S.systems.coolantPlant),
+    ()=> S.systems.coolantPlant++));
+
+  const phase2 = document.querySelector("#phase2"); phase2.innerHTML = "";
+  phase2.appendChild(makeNamedSystemCard("By-product Refinery", DESIGN.systems.byprodRefinery.label,
+    ()=> levelCost(DESIGN.systems.byprodRefinery.baseCost, DESIGN.systems.byprodRefinery.growth, S.systems.byprodRefinery),
+    ()=> S.systems.byprodRefinery++));
+
+  // placeholder examples for phase 3 specialty energies
+  const phase3 = document.querySelector("#phase3"); phase3.innerHTML = "";
+  phase3.appendChild(makeInfoCard("Thermal Output","Converts a slice of energy into Thermal passively (auto-unlocks later)."));
+  phase3.appendChild(makeInfoCard("Plasma Containment","Late-game: plasma boosts all production multiplicatively."));
+}
+function makeNamedSystemCard(name, desc, costFn, onBuy){
+  const card = document.createElement("div"); card.className="card";
+  const r1 = document.createElement("div"); r1.className="row";
+  r1.innerHTML = "<div><b>"+name+"</b><div class='small'>"+desc+"</div></div>";
+  const lvl = document.createElement("div"); lvl.className="pill mono"; lvl.textContent="Lv 0";
+  r1.appendChild(lvl);
+  const r2 = document.createElement("div"); r2.className="row"; r2.style.marginTop="6px";
+  const btn = document.createElement("button"); btn.className="btn"; btn.textContent="Buy";
+  const cost = document.createElement("div"); cost.className="small"; cost.textContent="Cost: 0";
+  r2.appendChild(btn); r2.appendChild(cost);
+  card.appendChild(r1); card.appendChild(r2);
+  card.sync = ()=> { lvl.textContent = "Lv " + (card.level||0); cost.textContent = "Cost: " + fmt(costFn()); btn.disabled = S.res.energy < costFn(); };
+  card.level = 0;
+  btn.onclick = ()=> { const c = costFn(); if (S.res.energy >= c){ S.res.energy -= c; onBuy(); card.level++; syncAll(); } };
+  return card;
+}
+function makeInfoCard(title, text){
+  const card = document.createElement("div"); card.className="card";
+  const r1 = document.createElement("div"); r1.className="row";
+  r1.innerHTML = "<div><b>"+title+"</b><div class='small'>"+text+"</div></div>";
+  card.appendChild(r1);
+  return card;
+}
+
+// ---------- purchase helper ----------
+function buyWithEnergy(cost, effect){ if (S.res.energy >= cost){ S.res.energy -= cost; effect(); syncAll(); } }
+
+// ---------- buttons & tabs ----------
+document.querySelector("#tap").addEventListener("click", ()=> { S.res.energy += tapAmount(); syncAll(); }, {passive:true});
+function showTab(tab){
+  document.querySelector("#overviewTab").classList.toggle("hidden", tab!=="overview");
+  document.querySelector("#systemsTab").classList.toggle("hidden", tab!=="systems");
+  document.querySelector("#maintenanceTab").classList.toggle("hidden", tab!=="maint");
+  document.querySelector("#dataTab").classList.toggle("hidden", tab!=="data");
+  [...document.querySelectorAll("#tabOverview, #tabSystems, #tabMaintenance, #tabData")].forEach(e=> e.classList.remove("active"));
+  if (tab==="overview") document.querySelector("#tabOverview").classList.add("active");
+  if (tab==="systems") document.querySelector("#tabSystems").classList.add("active");
+  if (tab==="maint") document.querySelector("#tabMaintenance").classList.add("active");
+  if (tab==="data") document.querySelector("#tabData").classList.add("active");
+}
+document.querySelector("#tabOverview").onclick = ()=> showTab("overview");
+document.querySelector("#tabSystems").onclick = ()=> showTab("systems");
+document.querySelector("#tabMaintenance").onclick = ()=> showTab("maint");
+document.querySelector("#tabData").onclick = ()=> showTab("data");
+
+// maintenance actions (cooldowns shown textually)
+let ventReadyAt=0, balanceReadyAt=0, purgeReadyAt=0;
+const cdVent=8000, cdBalance=7000, cdPurge=12000;
+document.querySelector("#ventSteam").onclick = ()=> { if (performance.now()>=ventReadyAt){ S.meters.heat = clamp(S.meters.heat - 25, 0, 100); ventReadyAt = performance.now()+cdVent; } };
+document.querySelector("#balancePressure").onclick = ()=> { if (performance.now()>=balanceReadyAt){ const p=S.meters.pressure; S.meters.pressure = clamp(p + (50-p)*0.6, 0,100); balanceReadyAt = performance.now()+cdBalance; } };
+document.querySelector("#purgeFilters").onclick = ()=> { if (performance.now()>=purgeReadyAt){ S.meters.contam = clamp(S.meters.contam - 35, 0, 100); purgeReadyAt = performance.now()+cdPurge; } };
+
+// ---------- main loop ----------
+let last = now();
+function tick(){
+  const t = now(); const dt = Math.max(0, (t-last)/1000); last = t;
+
+  // passive energy
+  S.res.energy += ppsEnergy() * dt;
+
+  // by-product accrual proportional to base energy production (waste)
+  S.res.byprod += ppsEnergyBase() * 0.05 * dt;
+
+  // convert by-product -> agent1 via refinery
+  S.res.byprod = Math.max(0, S.res.byprod);
+  const refineRate = S.systems.byprodRefinery * 0.5 * dt; // rate per level
+  const used = Math.min(refineRate, S.res.byprod);
+  S.res.byprod -= used; S.res.agent1 += used;
+
+  // coolant generation
+  S.res.coolant += S.systems.coolantPlant * 0.4 * dt;
+
+  // thermal trickle (placeholder)
+  S.res.thermal += ppsEnergy() * 0.02 * dt;
+
+  // meters dynamics
+  S.meters.heat = clamp(S.meters.heat + 0.0002 * (ppsEnergy()) * dt - 0.03*dt, 0, 100);
+  const driftTarget = 70;
+  const drift = (driftTarget - S.meters.pressure) * 0.003 * dt * 60;
+  S.meters.pressure = clamp(S.meters.pressure + drift, 0, 100);
+  S.meters.contam = clamp(S.meters.contam + 0.02 * dt, 0, 100);
+
+  syncAll();
+  requestAnimationFrame(tick);
+}
+
+// ---------- save/load ----------
+function save(){
+  S.lastTime = Date.now();
+  localStorage.setItem("idle.reactor.mechanic", JSON.stringify(S));
+  setSaveStatus("Saved.");
+}
+function load(){
+  try { return JSON.parse(localStorage.getItem("idle.reactor.mechanic")); }
+  catch { return null; }
+}
+function hardReset(){
+  if (!confirm("Hard reset and lose all progress?")) return;
+  S = structuredClone(defaultState);
+  buildAll(); save();
+}
+function setSaveStatus(msg){
+  const el = document.querySelector("#saveStatus");
+  el.textContent = msg; clearTimeout(setSaveStatus.t);
+  setSaveStatus.t = setTimeout(()=> el.textContent = "Autosaves every ~10s", 2000);
+}
+document.querySelector("#save").onclick = save;
+document.querySelector("#reset").onclick = hardReset;
+document.querySelector("#export").onclick = ()=> {
+  const data = btoa(unescape(encodeURIComponent(JSON.stringify(S))));
+  navigator.clipboard.writeText(data).then(()=> setSaveStatus("Export copied."));
+};
+document.querySelector("#import").onclick = async ()=> {
+  const data = prompt("Paste your exported code:"); if (!data) return;
+  try { const obj = JSON.parse(decodeURIComponent(escape(atob(data)))); if (!obj || typeof obj!=="object") throw 0; S = obj; buildAll(); save(); }
+  catch(e){ alert("Invalid import data."); }
+};
+
+// ---------- sync ----------
+function syncAll(){
+  // resources
+  for (const k of Object.keys(S.res)){
+    const el = document.querySelector("#res_"+k); if (el) el.textContent = el.textContent.split(":")[0] + ": " + fmt(S.res[k]);
+  }
+  // numbers
+  document.querySelector("#perClick").textContent = fmt(tapAmount());
+  document.querySelector("#rodLvl").textContent = "Lv " + S.upgrades.rod;
+  document.querySelector("#effTuneLvl").textContent = "Lv " + S.upgrades.effTune;
+  document.querySelector("#rodCost").textContent = "Cost: " + fmt(levelCost(15, 1.15, S.upgrades.rod));
+  document.querySelector("#effTuneCost").textContent = "Cost: " + fmt(levelCost(120, 1.18, S.upgrades.effTune));
+  // autos/system buttons states
+  [...document.querySelectorAll("#autos .card, #phase1 .card, #phase2 .card")].forEach(c=> c.sync && c.sync());
+  // efficiency label
+  const eff = efficiency();
+  document.querySelector("#efficiency").textContent = eff.toFixed(2)+"×";
+  document.querySelector("#efficiencyLabel").textContent = Math.round(eff*100)+"% eff";
+  // meters UI
+  setMeter("heat", S.meters.heat, 80);
+  setMeter("pressure", S.meters.pressure, 60, 40);
+  setMeter("contam", S.meters.contam, 70);
+  // cooldowns
+  setCD("#ventCD", ventReadyAt);
+  setCD("#balanceCD", balanceReadyAt);
+  setCD("#purgeCD", purgeReadyAt);
+}
+function setMeter(name, val, warnHigh=80, warnLow=null){
+  const box = document.querySelector("#"+name+"Box");
+  const fill = document.querySelector("#"+name+"Fill");
+  const label = document.querySelector("#"+name+"Val");
+  label.textContent = Math.round(val) + "%";
+  fill.style.width = Math.max(0, Math.min(100, val)) + "%";
+  box.classList.remove("bad","warn");
+  if (warnLow!==null && (val < warnLow || val > warnHigh)) box.classList.add("warn");
+  if (warnLow===null && val > warnHigh) box.classList.add("warn");
+  if (val > 90 || val < 10) box.classList.add("bad");
+}
+function setCD(sel, readyAt){
+  const el = document.querySelector(sel);
+  const rem = Math.max(0, readyAt - performance.now());
+  el.textContent = rem<=0 ? "ready" : (Math.ceil(rem/1000)+"s");
+}
+
+// ---------- build ----------
+function buildAll(){ buildOverview(); buildSystems(); syncAll(); }
+buildAll();
+
+// autosave
+setInterval(save, 10000);
+
+// offline catch-up (simplified)
+(function offline(){
+  const elapsed = (Date.now() - (S.lastTime||Date.now()))/1000;
+  const cap = Math.min(elapsed, 60*60*4);
+  S.res.energy += ppsEnergy() * cap * 0.5; // half-rate catch-up
+})();
+
+// go!
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
