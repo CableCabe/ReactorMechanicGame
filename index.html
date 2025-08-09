@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Stardust Foundry</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <style>
+    :root {
+      --pad: 14px;
+      --radius: 14px;
+      --maxw: 720px;
+      --shadow: 0 8px 24px rgba(0,0,0,.12);
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#0f0f12; color:#f3f3f7; }
+    .wrap { max-width: var(--maxw); margin: 0 auto; padding: env(safe-area-inset-top) var(--pad) calc(80px + env(safe-area-inset-bottom)); }
+    header { display:flex; align-items: center; justify-content: space-between; gap: 12px; margin: 18px 0 10px; }
+    .title { font-weight:700; letter-spacing:.3px; }
+    .stat { font-variant-numeric: tabular-nums; opacity:.9; }
+    .bigbtn {
+      width: 100%; margin: 14px 0; padding: 22px;
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, #2a2a34, #1a1a22);
+      border: 1px solid #3a3a46; box-shadow: var(--shadow);
+      font-size: 18px; font-weight: 700; text-align:center;
+      user-select:none;
+    }
+    .bigbtn:active { transform: translateY(1px); }
+    .cards { display: grid; grid-template-columns: 1fr; gap: 10px; }
+    @media (min-width: 560px) { .cards { grid-template-columns: 1fr 1fr; } }
+    .card {
+      padding: 12px; border-radius: var(--radius);
+      background: #15151b; border: 1px solid #2c2c36;
+    }
+    .row { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .name { font-weight:600; }
+    .desc { font-size: 12px; opacity:.8; }
+    .btn {
+      padding: 10px 12px; border-radius: 10px;
+      background:#262633; border:1px solid #3a3a46; font-weight:600;
+      min-width: 90px; text-align:center; white-space:nowrap;
+    }
+    .btn:disabled { opacity:.5; }
+    .pill { font-size:12px; opacity:.8; }
+    footer {
+      position: fixed; left: 0; right: 0; bottom: 0;
+      padding: 10px max(env(safe-area-inset-left), var(--pad)) calc(10px + env(safe-area-inset-bottom)) max(env(safe-area-inset-right), var(--pad));
+      background: linear-gradient(180deg, rgba(15,15,18,0), rgba(15,15,18,.9) 30%, rgba(15,15,18,1) 70%);
+      backdrop-filter: blur(6px);
+    }
+    .toolbar { max-width: var(--maxw); margin: 0 auto; display:flex; gap:10px; }
+    .tbtn { flex:1; padding:12px; border-radius: 12px; background:#1a1a22; border:1px solid #2c2c36; text-align:center; font-weight:600; }
+    .small { font-size:12px; opacity:.8; }
+    .spacer { height: 8px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <div class="title">Stardust Foundry</div>
+        <div class="small">A tiny idle template you can bend to your taste</div>
+      </div>
+      <div class="stat" id="pps">0/s</div>
+    </header>
+
+    <div class="stat" id="dust">0</div>
+    <button class="bigbtn" id="tap">Harvest Stardust (+<span id="perClick">1</span>)</button>
+
+    <div class="card">
+      <div class="row"><div class="name">Upgrades</div><div class="pill">Scale ramps up, choose wisely</div></div>
+      <div class="spacer"></div>
+      <div class="cards" id="upgrades"></div>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="card">
+      <div class="row"><div class="name">Automation</div><div class="pill">Earn while idle</div></div>
+      <div class="spacer"></div>
+      <div class="cards" id="autos"></div>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="card">
+      <div class="row"><div class="name">Save & Data</div></div>
+      <div class="spacer"></div>
+      <div class="row" style="gap:8px; flex-wrap:wrap">
+        <button class="btn" id="save">Save now</button>
+        <button class="btn" id="reset">Hard reset</button>
+        <button class="btn" id="export">Export</button>
+        <button class="btn" id="import">Import</button>
+      </div>
+      <div class="small" id="saveStatus" style="margin-top:8px; opacity:.7">Autosaves every ~10s</div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="toolbar">
+      <div class="tbtn" id="tabMain">Main</div>
+      <div class="tbtn" id="tabUpg">Upgrades</div>
+      <div class="tbtn" id="tabAuto">Automation</div>
+    </div>
+  </footer>
+
+  <script>
+  // ---------- helpers ----------
+  const $ = sel => document.querySelector(sel);
+  const elDust = $("#dust");
+  const elPerClick = $("#perClick");
+  const elPps = $("#pps");
+  const elUpgrades = $("#upgrades");
+  const elAutos = $("#autos");
+  const fmt = n => {
+    if (!isFinite(n)) return "∞";
+    if (n < 1e6) return n.toLocaleString();
+    const units = ["","K","M","B","T","Qa","Qi","Sx","Sp","Oc","No","Dc"];
+    let u = 0;
+    while (n >= 1000 && u < units.length-1) { n /= 1000; u++; }
+    return n.toFixed(n >= 100 ? 0 : n >= 10 ? 1 : 2).replace(/\.0+$/,"")+units[u];
+  };
+  const now = () => performance.now();
+
+  // ---------- core state ----------
+  const defaultState = {
+    dust: 0,
+    perClick: 1,
+    upgrades: { clickBoost: 0, focusedGrip: 0 },
+    autos: { collector: 0, drone: 0, refinery: 0 },
+    lastTime: Date.now(),
+    version: 1
+  };
+  let S = load() || structuredClone(defaultState);
+
+  function save() {
+    S.lastTime = Date.now();
+    localStorage.setItem("idle.stardust", JSON.stringify(S));
+    setSaveStatus("Saved.");
+  }
+  function load() {
+    try { return JSON.parse(localStorage.getItem("idle.stardust")); }
+    catch { return null; }
+  }
+  function hardReset() {
+    if (!confirm("Hard reset and lose all progress?")) return;
+    S = structuredClone(defaultState);
+    buildUI();
+    save();
+  }
+  function setSaveStatus(msg) {
+    const el = $("#saveStatus");
+    el.textContent = msg;
+    clearTimeout(setSaveStatus.t);
+    setSaveStatus.t = setTimeout(()=> el.textContent = "Autosaves every ~10s", 2000);
+  }
+
+  // ---------- design knobs (make it yours) ----------
+  const DESIGN = {
+    tapBase: 1,                 // base per tap
+    clickBoost: {               // upgrade tree: improves tap
+      baseCost: 10, growth: 1.15, delta: 1
+    },
+    focusedGrip: {              // % tap bonus multiplier per level
+      baseCost: 100, growth: 1.18, percent: 10 // +10% per level
+    },
+    autos: {
+      collector: { base: 0.2, baseCost: 25, growth: 1.16, label: "Collector (+0.2/s)" },
+      drone:     { base: 2,   baseCost: 250, growth: 1.18, label: "Drone (+2/s)" },
+      refinery:  { base: 12,  baseCost: 1200,growth: 1.20, label: "Refinery (+12/s)" }
+    }
+  };
+
+  // ---------- economy ----------
+  function levelCost(baseCost, growth, level) {
+    return Math.ceil(baseCost * Math.pow(growth, level));
+  }
+  function tapAmount() {
+    const base = DESIGN.tapBase + S.upgrades.clickBoost * DESIGN.clickBoost.delta;
+    const mult = 1 + (S.upgrades.focusedGrip * DESIGN.focusedGrip.percent)/100;
+    return base * mult;
+  }
+  function pps() {
+    let sum = 0;
+    for (const k in S.autos) {
+      const def = DESIGN.autos[k];
+      sum += S.autos[k] * def.base;
+    }
+    return sum;
+  }
+
+  // ---------- UI builders ----------
+  function makeUpgradeCard(key, name, desc, cost, onBuy) {
+    const card = document.createElement("div");
+    card.className = "card";
+    const row = document.createElement("div");
+    row.className = "row";
+    const left = document.createElement("div");
+    const nm = document.createElement("div"); nm.className = "name"; nm.textContent = name;
+    const ds = document.createElement("div"); ds.className = "desc"; ds.textContent = desc;
+    left.appendChild(nm); left.appendChild(ds);
+
+    const btn = document.createElement("button");
+    btn.className = "btn";
+    const price = document.createElement("div"); price.className = "small"; price.style.opacity = .8;
+
+    function sync() {
+      btn.textContent = "Buy";
+      price.textContent = "Cost: " + fmt(cost());
+      btn.disabled = S.dust < cost();
+    }
+    btn.onclick = () => {
+      const c = cost();
+      if (S.dust >= c) { S.dust -= c; onBuy(); syncAll(); }
+    };
+
+    const right = document.createElement("div");
+    right.style.textAlign = "right";
+    right.appendChild(btn); right.appendChild(price);
+
+    row.appendChild(left); row.appendChild(right);
+    card.appendChild(row);
+    card.dataset.key = key;
+    card.sync = sync;
+    return card;
+  }
+
+  function buildUI() {
+    // Numbers
+    elPerClick.textContent = fmt(tapAmount());
+    elPps.textContent = fmt(pps()) + "/s";
+    elDust.textContent = fmt(S.dust);
+
+    // Upgrades
+    elUpgrades.innerHTML = "";
+    const clickBoostCard = makeUpgradeCard(
+      "clickBoost",
+      "Click Boost (+"+DESIGN.clickBoost.delta+" per tap)",
+      "Increase dust per tap.",
+      () => levelCost(DESIGN.clickBoost.baseCost, DESIGN.clickBoost.growth, S.upgrades.clickBoost),
+      () => S.upgrades.clickBoost++
+    );
+    const focusedGripCard = makeUpgradeCard(
+      "focusedGrip",
+      "Focused Grip (+"+DESIGN.focusedGrip.percent+"% tap)",
+      "Multiply your per-tap yield.",
+      () => levelCost(DESIGN.focusedGrip.baseCost, DESIGN.focusedGrip.growth, S.upgrades.focusedGrip),
+      () => S.upgrades.focusedGrip++
+    );
+    elUpgrades.appendChild(clickBoostCard);
+    elUpgrades.appendChild(focusedGripCard);
+
+    // Autos
+    elAutos.innerHTML = "";
+    for (const key of Object.keys(DESIGN.autos)) {
+      const def = DESIGN.autos[key];
+      const card = makeUpgradeCard(
+        key,
+        def.label,
+        "Hire/build to automate earnings.",
+        () => levelCost(def.baseCost, def.growth, S.autos[key]),
+        () => S.autos[key]++
+      );
+      elAutos.appendChild(card);
+    }
+    syncAll();
+  }
+
+  function syncAll() {
+    elPerClick.textContent = fmt(tapAmount());
+    elPps.textContent = fmt(pps()) + "/s";
+    elDust.textContent = fmt(S.dust);
+    [...document.querySelectorAll(".card")].forEach(c => c.sync && c.sync());
+  }
+
+  // ---------- game loop ----------
+  $("#tap").addEventListener("click", () => {
+    S.dust += tapAmount();
+    syncAll();
+  }, { passive:true });
+
+  // idle tick (10x per second for smoothness)
+  let last = now();
+  setInterval(() => {
+    const t = now();
+    const dt = Math.max(0, (t - last) / 1000); // seconds
+    last = t;
+    S.dust += pps() * dt;
+    syncAll();
+  }, 100);
+
+  // autosave
+  setInterval(() => save(), 10000);
+
+  // catch-up for offline progress (simple)
+  (function offlineEarnings(){
+    const elapsed = (Date.now() - (S.lastTime || Date.now())) / 1000; // seconds
+    const maxCatchup = 60 * 60 * 4; // cap 4h
+    const grant = pps() * Math.min(elapsed, maxCatchup);
+    if (grant > 0) {
+      S.dust += grant;
+      setSaveStatus(`Earned ${fmt(grant)} while you were away.`);
+    }
+    syncAll();
+  })();
+
+  // buttons
+  $("#save").onclick = save;
+  $("#reset").onclick = hardReset;
+  $("#export").onclick = () => {
+    const data = btoa(unescape(encodeURIComponent(JSON.stringify(S))));
+    navigator.clipboard.writeText(data).then(()=> setSaveStatus("Export copied to clipboard."));
+  };
+  $("#import").onclick = async () => {
+    const data = prompt("Paste your exported code:");
+    if (!data) return;
+    try {
+      const obj = JSON.parse(decodeURIComponent(escape(atob(data))));
+      if (!obj || typeof obj !== "object") throw 0;
+      S = obj; buildUI(); save();
+    } catch(e) { alert("Invalid import data."); }
+  };
+
+  // basic tabs (non-functional sections are all on one page in this template)
+  $("#tabMain").onclick = () => window.scrollTo({ top: 0, behavior: "smooth" });
+  $("#tabUpg").onclick = () => elUpgrades.scrollIntoView({ behavior:"smooth", block:"start" });
+  $("#tabAuto").onclick = () => elAutos.scrollIntoView({ behavior:"smooth", block:"start" });
+
+  // init
+  buildUI();
+  </script>
+</body>
+</html>
